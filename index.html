@@ -1,0 +1,747 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="theme-color" content="#2E7D32">
+    <title>Sistema Pampulha - Gerência de Fazenda</title>
+    <link rel="manifest" href="manifest.json">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.11.0/firebase-firestore-compat.js"></script>
+
+    <style>
+        :root {
+            --primary: #2E7D32;
+            --primary-dark: #1B5E20;
+            --secondary: #81C784;
+            --bg-color: #f4f7f6;
+            --text-color: #333;
+            --card-bg: #fff;
+            --danger: #d32f2f;
+            --warning: #f57c00;
+            --info: #1976d2;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        body { background-color: var(--bg-color); color: var(--text-color); display: flex; height: 100vh; overflow: hidden; }
+
+        /* Menu */
+        nav { width: 250px; background-color: var(--primary); color: white; display: flex; flex-direction: column; z-index: 100; flex-shrink: 0;}
+        .logo { padding: 20px; font-size: 24px; font-weight: bold; text-align: center; border-bottom: 1px solid var(--primary-dark); }
+        .menu-items { flex: 1; overflow-y: auto; display: flex; flex-direction: column; }
+        .menu-item { padding: 15px 20px; cursor: pointer; border-bottom: 1px solid var(--primary-dark); transition: 0.3s; font-size: 16px; }
+        .menu-item:hover, .menu-item.active { background-color: var(--primary-dark); }
+
+        /* Main Area */
+        main { flex: 1; display: flex; flex-direction: column; overflow: hidden; position: relative; }
+        header { background-color: var(--card-bg); padding: 15px 20px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); display: flex; justify-content: space-between; align-items: center; z-index: 10; }
+        .content { flex: 1; padding: 20px; overflow-y: auto; position: relative; }
+        
+        .section { display: none; animation: fadeIn 0.3s; }
+        .section.active { display: block; }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+
+        /* Componentes */
+        .card { background-color: var(--card-bg); padding: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05); margin-bottom: 20px; }
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 15px; }
+        .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+        
+        h1 { font-size: 24px; }
+        h2 { font-size: 20px; margin-bottom: 15px; color: var(--primary-dark); border-bottom: 2px solid var(--secondary); padding-bottom: 5px; }
+        h3 { margin-bottom: 10px; color: var(--primary); }
+
+        .form-group { margin-bottom: 15px; }
+        label { display: block; margin-bottom: 5px; font-weight: 600; font-size: 14px;}
+        input, select, textarea { width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px;}
+        
+        /* Botões */
+        button { padding: 10px 15px; background-color: var(--primary); color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; transition: 0.3s; display: inline-flex; align-items: center; justify-content: center; gap: 5px;}
+        button:hover { background-color: var(--primary-dark); }
+        button.danger { background-color: var(--danger); }
+        button.warning { background-color: var(--warning); color: #fff;}
+        button.info { background-color: var(--info); }
+        button.small { padding: 6px 10px; font-size: 12px; }
+        button:disabled { opacity: 0.6; cursor: not-allowed; }
+        .actions { display: flex; gap: 10px; margin-top: 15px; flex-wrap: wrap; }
+
+        /* Tabelas */
+        .table-responsive { overflow-x: auto; width: 100%; -webkit-overflow-scrolling: touch; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; white-space: nowrap; }
+        th, td { padding: 10px; text-align: left; border-bottom: 1px solid #ddd; }
+        th { background-color: var(--secondary); color: var(--primary-dark); }
+
+        /* Modais e Loaders */
+        .modal-overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); justify-content: center; align-items: center; z-index: 1000; padding: 15px; }
+        .modal-content { background: white; padding: 25px; border-radius: 8px; width: 100%; max-width: 400px; max-height: 90vh; overflow-y: auto; text-align: center;}
+        #loader { display: none; position: fixed; top: 10px; right: 10px; background: var(--warning); color: white; padding: 5px 15px; border-radius: 20px; font-size: 12px; z-index: 9999;}
+
+        /* Tela de Detalhes (Overlays) */
+        .detail-view { display: none; position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: var(--bg-color); z-index: 50; overflow-y: auto; padding: 20px; }
+        .detail-view.active { display: block; animation: slideIn 0.3s; }
+        .detail-header { margin: -20px -20px 20px -20px; display: flex; justify-content: space-between; align-items: center; padding: 15px; background: var(--card-bg); box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .resumo-info p { margin-bottom: 8px; font-size: 14px; }
+        .resumo-info strong { color: var(--primary-dark); }
+
+        @keyframes slideIn { from { transform: translateX(100%); } to { transform: translateX(0); } }
+
+        /* Mobile (APP) */
+        @media (max-width: 768px) {
+            body { flex-direction: column; }
+            nav { width: 100%; flex-direction: row; order: 1; overflow-x: auto; white-space: nowrap; scrollbar-width: none; }
+            nav::-webkit-scrollbar { display: none; }
+            .logo { display: none; }
+            .menu-items { flex-direction: row; width: 100%; }
+            .menu-item { flex: 1; text-align: center; border-bottom: 4px solid transparent; border-right: 1px solid var(--primary-dark); padding: 12px 15px; font-size: 13px; font-weight: bold; }
+            .menu-item.active { border-bottom: 4px solid #fff; }
+            
+            main { order: 2; }
+            header { padding: 10px 15px; }
+            h1 { font-size: 18px; }
+            h2 { font-size: 16px; margin-bottom: 10px; }
+            .content { padding: 10px; }
+            .card { padding: 15px; margin-bottom: 15px; }
+            label { font-size: 12px; }
+            input, select, textarea { padding: 8px; font-size: 13px; }
+            button { padding: 8px 12px; font-size: 13px; width: 100%; }
+            button.small { width: auto; padding: 5px 8px; font-size: 11px; }
+            .actions button { width: auto; flex: 1; }
+            table, th, td { font-size: 12px; padding: 8px; }
+            .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; gap: 10px; }
+            .detail-view { padding: 10px; }
+            #dash-gado, #dash-pasto, #dash-maq { font-size: 24px; }
+        }
+
+        /* Impressão PDF */
+        @media print {
+            nav, button, form, .modal-overlay, .actions, #loader { display: none !important; }
+            body, main { height: auto !important; overflow: visible !important; background: white !important; display: block !important; }
+            .card { box-shadow: none !important; border: 1px solid #ccc !important; margin-bottom: 15px !important; page-break-inside: avoid; }
+            table { border: 1px solid #ccc; width: 100% !important; }
+            th, td { border-bottom: 1px solid #ccc; white-space: normal; }
+            * { color: black !important; }
+
+            body.print-detail-mode main > header, body.print-detail-mode main > .content { display: none !important; }
+            body.print-detail-mode .detail-view.active { position: static !important; height: auto !important; overflow: visible !important; padding: 0 !important; display: block !important; }
+            body.print-detail-mode .detail-header { box-shadow: none; border-bottom: 2px solid #ccc; margin: 0 0 20px 0; padding: 0 0 10px 0;}
+        }
+    </style>
+</head>
+<body>
+
+    <div id="loader">Sincronizando...</div>
+
+    <nav>
+        <div class="logo">Pampulha</div>
+        <div class="menu-items">
+            <div class="menu-item active" onclick="mudarAba('dashboard')">Painel</div>
+            <div class="menu-item" onclick="mudarAba('gado')">Gado</div>
+            <div class="menu-item" onclick="mudarAba('pasto')">Pasto</div>
+            <div class="menu-item" onclick="mudarAba('maquinas')">Máquinas</div>
+        </div>
+    </nav>
+
+    <main>
+        <header>
+            <h1 id="titulo-pagina">Dashboard</h1>
+            <button class="info small" onclick="window.print()" style="width: auto;">🖨️ PDF Geral</button>
+        </header>
+
+        <div class="content" id="main-content">
+            <div id="dashboard" class="section active">
+                <div class="grid-3">
+                    <div class="card"><h2>Total Gado</h2><h1 id="dash-gado">0</h1></div>
+                    <div class="card"><h2>Pastos Ativos</h2><h1 id="dash-pasto">0</h1></div>
+                    <div class="card"><h2>Máquinas</h2><h1 id="dash-maq">0</h1></div>
+                </div>
+            </div>
+
+            <div id="gado" class="section">
+                <div class="card">
+                    <h2>Novo Animal</h2>
+                    <form id="formGado" onsubmit="salvarGado(event)">
+                        <div class="grid-4">
+                            <div class="form-group"><label>Nome/Brinco *</label><input type="text" id="g_brinco" required></div>
+                            <div class="form-group"><label>Pai</label><input type="text" id="g_pai"></div>
+                            <div class="form-group"><label>Mãe</label><input type="text" id="g_mae"></div>
+                            <div class="form-group"><label>Data Nascimento</label><input type="date" id="g_nasc"></div>
+                            <div class="form-group"><label>Sexo</label><select id="g_sexo"><option>Macho</option><option>Fêmea</option></select></div>
+                            <div class="form-group"><label>Categoria</label><input type="text" id="g_cat" placeholder="Ex: Bezerro, Novilha"></div>
+                            <div class="form-group"><label>Estágio Reprodutivo</label><input type="text" id="g_estagio"></div>
+                            <div class="form-group"><label>Último Parto</label><input type="date" id="g_ult_parto"></div>
+                            <div class="form-group"><label>Com Aborto?</label><select id="g_aborto"><option>Não</option><option>Sim</option></select></div>
+                            <div class="form-group"><label>Limite Cobertura</label><input type="number" id="g_lim_cob"></div>
+                            <div class="form-group"><label>Qtd Cobertura</label><input type="number" id="g_qtd_cob"></div>
+                            <div class="form-group"><label>Data Últ. Cobertura</label><input type="date" id="g_data_cob"></div>
+                            <div class="form-group"><label>Diferença Limite Cob.</label><input type="number" id="g_dif_cob"></div>
+                            <div class="form-group"><label>Qtd Partos</label><input type="number" id="g_qtd_partos"></div>
+                            <div class="form-group"><label>Dias Abertos</label><input type="number" id="g_dias_abertos"></div>
+                            <div class="form-group"><label>Palpação</label><select id="g_palpacao"><option>Pendente</option><option>Positiva</option><option>Negativa</option></select></div>
+                            <div class="form-group"><label>Previsão Parto</label><input type="date" id="g_prev_parto"></div>
+                            <div class="form-group"><label>IEP Dia</label><input type="number" id="g_iep_dia"></div>
+                            <div class="form-group"><label>IEP Mês</label><input type="number" id="g_iep_mes"></div>
+                            <div class="form-group"><label>Última Secagem</label><input type="date" id="g_secagem"></div>
+                            <div class="form-group"><label>Cio</label><input type="date" id="g_cio"></div>
+                        </div>
+                        <div class="form-group"><label>Outros / Observações</label><textarea id="g_outros"></textarea></div>
+                        <input type="hidden" id="g_id">
+                        <div class="actions">
+                            <button type="submit">Salvar Animal</button>
+                            <button type="button" class="warning" onclick="limparFormGado()">Limpar</button>
+                        </div>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2>Rebanho Cadastrado</h2>
+                    <div class="table-responsive">
+                        <table>
+                            <thead><tr><th>Brinco</th><th>Sexo</th><th>Categoria</th><th>Status</th><th>Ações</th></tr></thead>
+                            <tbody id="lista-gado"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="pasto" class="section">
+                <div class="card">
+                    <h2>Novo Pasto</h2>
+                    <form onsubmit="salvarPasto(event)">
+                        <div class="grid-2">
+                            <div class="form-group"><label>Nome / Número do Pasto *</label><input type="text" id="p_nome" required></div>
+                        </div>
+                        <button type="submit">Cadastrar Pasto</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2>Pastos Cadastrados</h2>
+                    <div class="table-responsive">
+                        <table>
+                            <thead><tr><th>Nome/Número</th><th>Ações</th></tr></thead>
+                            <tbody id="lista-pasto"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <div id="maquinas" class="section">
+                <div class="card">
+                    <h2>Nova Máquina</h2>
+                    <form onsubmit="salvarMaquina(event)">
+                        <div class="grid-2">
+                            <div class="form-group"><label>Nome / Modelo *</label><input type="text" id="m_nome" required></div>
+                        </div>
+                        <button type="submit">Cadastrar Máquina</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2>Máquinas Cadastradas</h2>
+                    <div class="table-responsive">
+                        <table>
+                            <thead><tr><th>Modelo</th><th>Ações</th></tr></thead>
+                            <tbody id="lista-maquinas"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+        <div id="detalhes-gado" class="detail-view">
+            <header class="detail-header">
+                <h1 id="detalhe-gado-titulo" style="margin:0;">Ficha do Animal</h1>
+                <div style="display: flex; gap: 10px;">
+                    <button class="info small" onclick="imprimirRelatorioDetalhe()">🖨️ Imprimir Ficha</button>
+                    <button class="small" onclick="fecharDetalhes('detalhes-gado')">Voltar</button>
+                </div>
+            </header>
+            
+            <div class="card resumo-info">
+                <h2>Dados do Animal</h2>
+                <div class="grid-2" id="gado-info-resumo"></div>
+            </div>
+
+            <div class="card">
+                <h2>Ações de Status</h2>
+                <div class="actions">
+                    <button class="info" onclick="alterarStatusGado('Ativo')">Ativo</button>
+                    <button class="warning" onclick="alterarStatusGado('Vendido')">Vendido</button>
+                    <button class="danger" onclick="alterarStatusGado('Morto')">Morto</button>
+                </div>
+                <p style="margin-top:10px; font-size: 14px;">Status Atual: <strong id="detalhe-gado-status"></strong></p>
+            </div>
+            <div class="grid-2">
+                <div class="card">
+                    <h2>Nova Pesagem</h2>
+                    <form onsubmit="addPesagem(event)">
+                        <div class="form-group"><label>Data</label><input type="date" id="pesagem_data" required></div>
+                        <div class="form-group"><label>Peso (Kg)</label><input type="number" step="0.01" id="pesagem_peso" required></div>
+                        <button type="submit">Registrar Peso</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2>Novo Histórico / Evento</h2>
+                    <form onsubmit="addHistoricoGado(event)">
+                        <div class="form-group"><label>Data</label><input type="date" id="hg_data" required></div>
+                        <div class="form-group"><label>Descrição</label><input type="text" id="hg_desc" required></div>
+                        <button type="submit">Registrar Histórico</button>
+                    </form>
+                </div>
+            </div>
+            <div class="card">
+                <h2>Histórico do Animal</h2>
+                <div class="table-responsive">
+                    <table>
+                        <thead><tr><th>Tipo</th><th>Data</th><th>Detalhe</th><th>Ações</th></tr></thead>
+                        <tbody id="tabela-historico-gado"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div id="detalhes-pasto" class="detail-view">
+            <header class="detail-header">
+                <h1 id="detalhe-pasto-titulo" style="margin:0;">Ficha do Pasto</h1>
+                <div style="display: flex; gap: 10px;">
+                    <button class="info small" onclick="imprimirRelatorioDetalhe()">🖨️ Imprimir Ficha</button>
+                    <button class="small" onclick="fecharDetalhes('detalhes-pasto')">Voltar</button>
+                </div>
+            </header>
+
+            <div class="card resumo-info">
+                <h2>Resumo</h2>
+                <div id="pasto-info-resumo"></div>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h2>Registrar Evento no Pasto</h2>
+                    <form onsubmit="addEventoPasto(event)">
+                        <div class="form-group"><label>Tipo de Evento</label>
+                            <select id="pe_tipo" onchange="toggleCamposPasto()">
+                                <option value="Manejo">Manejo (Entrada/Saída)</option>
+                                <option value="Manutencao">Manutenção do Piquete</option>
+                                <option value="Praga">Controle de Pragas</option>
+                                <option value="Adubacao">Adubação</option>
+                                <option value="Observacao">Observação</option>
+                            </select>
+                        </div>
+                        <div class="form-group"><label>Data</label><input type="date" id="pe_data" required></div>
+                        <div id="campo-praga" style="display:none;" class="form-group"><label>Veneno Utilizado</label><input type="text" id="pe_veneno"></div>
+                        <div id="campo-adubo" style="display:none;" class="form-group"><label>Quantidade (Kg)</label><input type="number" id="pe_kg"></div>
+                        <div class="form-group"><label>Descrição / Detalhes</label><textarea id="pe_desc" required></textarea></div>
+                        <button type="submit">Registrar no Pasto</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2>Histórico do Pasto</h2>
+                    <div class="table-responsive">
+                        <table>
+                            <thead><tr><th>Data</th><th>Tipo</th><th>Detalhes</th><th>Ações</th></tr></thead>
+                            <tbody id="tabela-historico-pasto"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div id="detalhes-maquina" class="detail-view">
+            <header class="detail-header">
+                <h1 id="detalhe-maquina-titulo" style="margin:0;">Ficha da Máquina</h1>
+                <div style="display: flex; gap: 10px;">
+                    <button class="info small" onclick="imprimirRelatorioDetalhe()">🖨️ Imprimir Ficha</button>
+                    <button class="small" onclick="fecharDetalhes('detalhes-maquina')">Voltar</button>
+                </div>
+            </header>
+
+            <div class="card resumo-info">
+                <h2>Resumo</h2>
+                <div id="maquina-info-resumo"></div>
+            </div>
+
+            <div class="grid-2">
+                <div class="card">
+                    <h2>Registrar Manutenção</h2>
+                    <form onsubmit="addEventoMaquina(event)">
+                        <div class="form-group"><label>Data</label><input type="date" id="me_data" required></div>
+                        <div class="form-group"><label>Evento</label><input type="text" id="me_evento" required></div>
+                        <div class="form-group"><label>Peça Trocada</label><input type="text" id="me_peca"></div>
+                        <div class="form-group"><label>Custo Mão de Obra (R$)</label><input type="number" step="0.01" id="me_custo_mo"></div>
+                        <div class="form-group"><label>Custo Peça (R$)</label><input type="number" step="0.01" id="me_custo_peca"></div>
+                        <div class="form-group"><label>Data Próxima Manutenção</label><input type="date" id="me_prox_manut"></div>
+                        <button type="submit">Registrar Evento</button>
+                    </form>
+                </div>
+                <div class="card">
+                    <h2>Histórico da Máquina</h2>
+                    <div class="table-responsive">
+                        <table>
+                            <thead><tr><th>Data</th><th>Evento</th><th>Custos</th><th>Próxima Manut.</th><th>Ações</th></tr></thead>
+                            <tbody id="tabela-historico-maquina"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+
+    <div class="modal-overlay" id="modal-confirm">
+        <div class="modal-content">
+            <h3 id="confirm-msg" style="margin-bottom: 20px;">Tem certeza?</h3>
+            <div class="actions" style="justify-content: center;">
+                <button class="danger" onclick="fecharModalConfirm()">Cancelar</button>
+                <button id="btn-confirm-yes">Confirmar</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // ================= CONFIGURAÇÃO DO FIREBASE =================
+        const firebaseConfig = {
+            apiKey: "AIzaSyDI5tGIr_I9FZEWjEdn8VDL9CLPy6WqJAc",
+            authDomain: "fazenda-pampulha.firebaseapp.com",
+            projectId: "fazenda-pampulha",
+            storageBucket: "fazenda-pampulha.firebasestorage.app",
+            messagingSenderId: "57523808776",
+            appId: "1:57523808776:web:da6831136f94422f757fbd",
+            measurementId: "G-043EHQL7FN"
+        };
+
+        // Inicializa o Firebase
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+
+        // Ativa o modo OFFLINE (Cache Local)
+        db.enablePersistence()
+            .catch(function(err) {
+                if (err.code == 'failed-precondition') {
+                    console.warn('Múltiplas abas abertas, persistência offline ativada apenas em uma.');
+                } else if (err.code == 'unimplemented') {
+                    console.warn('Navegador não suporta persistência offline.');
+                }
+            });
+
+        // ================= ESTADO LOCAL =================
+        let bd = { gados: [], pastos: [], maquinas: [] };
+        let itemSelecionadoId = null;
+
+        // Feedback Visual
+        function showLoader(show) { document.getElementById('loader').style.display = show ? 'block' : 'none'; }
+
+        // ================= SINCRONIZAÇÃO EM TEMPO REAL (LISTENERS) =================
+        showLoader(true);
+        db.collection("gados").onSnapshot((snapshot) => {
+            bd.gados = [];
+            snapshot.forEach((doc) => { bd.gados.push({ id: doc.id, ...doc.data() }); });
+            renderListas();
+            if(itemSelecionadoId && document.getElementById('detalhes-gado').classList.contains('active')) renderDetalhesGado();
+            showLoader(false);
+        });
+
+        db.collection("pastos").onSnapshot((snapshot) => {
+            bd.pastos = [];
+            snapshot.forEach((doc) => { bd.pastos.push({ id: doc.id, ...doc.data() }); });
+            renderListas();
+            if(itemSelecionadoId && document.getElementById('detalhes-pasto').classList.contains('active')) renderDetalhesPasto();
+        });
+
+        db.collection("maquinas").onSnapshot((snapshot) => {
+            bd.maquinas = [];
+            snapshot.forEach((doc) => { bd.maquinas.push({ id: doc.id, ...doc.data() }); });
+            renderListas();
+            if(itemSelecionadoId && document.getElementById('detalhes-maquina').classList.contains('active')) renderDetalhesMaquina();
+        });
+
+        // ================= FUNÇÕES GERAIS =================
+        function formatData(dataStr) { return dataStr ? dataStr.split('-').reverse().join('/') : '-'; }
+        
+        function imprimirRelatorioDetalhe() {
+            document.body.classList.add('print-detail-mode');
+            window.print();
+            setTimeout(() => { document.body.classList.remove('print-detail-mode'); }, 1000);
+        }
+
+        function mudarAba(abaId) {
+            document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+            document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+            document.getElementById(abaId).classList.add('active');
+            event.currentTarget.classList.add('active');
+            const titulos = { 'dashboard':'Painel', 'gado':'Gestão de Gado', 'pasto':'Gestão de Pasto', 'maquinas':'Gestão de Máquinas' };
+            document.getElementById('titulo-pagina').innerText = titulos[abaId];
+        }
+
+        function abrirDetalhes(telaId, id, tipo) {
+            itemSelecionadoId = id;
+            document.getElementById(telaId).classList.add('active');
+            if(tipo === 'gado') renderDetalhesGado();
+            if(tipo === 'pasto') renderDetalhesPasto();
+            if(tipo === 'maquina') renderDetalhesMaquina();
+        }
+        function fecharDetalhes(telaId) { document.getElementById(telaId).classList.remove('active'); itemSelecionadoId = null; }
+
+        let confirmAction = null;
+        function chamarConfirmacao(msg, acao) {
+            document.getElementById('confirm-msg').innerText = msg;
+            document.getElementById('modal-confirm').style.display = 'flex';
+            confirmAction = acao;
+        }
+        function fecharModalConfirm() { document.getElementById('modal-confirm').style.display = 'none'; confirmAction = null; }
+        document.getElementById('btn-confirm-yes').addEventListener('click', () => { if(confirmAction) confirmAction(); fecharModalConfirm(); });
+
+        // ================= GADO =================
+        function limparFormGado() { document.getElementById('formGado').reset(); document.getElementById('g_id').value = ''; }
+
+        function salvarGado(e) {
+            e.preventDefault();
+            const idFirebase = document.getElementById('g_id').value;
+            const animalData = {
+                brinco: document.getElementById('g_brinco').value, pai: document.getElementById('g_pai').value, mae: document.getElementById('g_mae').value,
+                nasc: document.getElementById('g_nasc').value, sexo: document.getElementById('g_sexo').value, cat: document.getElementById('g_cat').value,
+                estagio: document.getElementById('g_estagio').value, ult_parto: document.getElementById('g_ult_parto').value, aborto: document.getElementById('g_aborto').value,
+                lim_cob: document.getElementById('g_lim_cob').value, qtd_cob: document.getElementById('g_qtd_cob').value, data_cob: document.getElementById('g_data_cob').value,
+                dif_cob: document.getElementById('g_dif_cob').value, qtd_partos: document.getElementById('g_qtd_partos').value, dias_abertos: document.getElementById('g_dias_abertos').value,
+                palpacao: document.getElementById('g_palpacao').value, prev_parto: document.getElementById('g_prev_parto').value, iep_dia: document.getElementById('g_iep_dia').value,
+                iep_mes: document.getElementById('g_iep_mes').value, secagem: document.getElementById('g_secagem').value, cio: document.getElementById('g_cio').value,
+                outros: document.getElementById('g_outros').value
+            };
+
+            chamarConfirmacao("Deseja salvar no Banco de Dados?", () => {
+                if(idFirebase) {
+                    db.collection("gados").doc(idFirebase).update(animalData); // Atualiza sem apagar histórico
+                } else {
+                    animalData.status = 'Ativo';
+                    animalData.historico = [];
+                    animalData.pesagens = [];
+                    db.collection("gados").add(animalData);
+                }
+                limparFormGado();
+            });
+        }
+
+        function editarGado(id) {
+            const g = bd.gados.find(x => x.id === id);
+            document.getElementById('g_id').value = g.id; document.getElementById('g_brinco').value = g.brinco;
+            document.getElementById('g_pai').value = g.pai; document.getElementById('g_mae').value = g.mae;
+            document.getElementById('g_nasc').value = g.nasc; document.getElementById('g_sexo').value = g.sexo;
+            document.getElementById('g_cat').value = g.cat; document.getElementById('g_estagio').value = g.estagio;
+            document.getElementById('g_ult_parto').value = g.ult_parto; document.getElementById('g_aborto').value = g.aborto;
+            document.getElementById('g_lim_cob').value = g.lim_cob; document.getElementById('g_qtd_cob').value = g.qtd_cob;
+            document.getElementById('g_data_cob').value = g.data_cob; document.getElementById('g_dif_cob').value = g.dif_cob;
+            document.getElementById('g_qtd_partos').value = g.qtd_partos; document.getElementById('g_dias_abertos').value = g.dias_abertos;
+            document.getElementById('g_palpacao').value = g.palpacao; document.getElementById('g_prev_parto').value = g.prev_parto;
+            document.getElementById('g_iep_dia').value = g.iep_dia; document.getElementById('g_iep_mes').value = g.iep_mes;
+            document.getElementById('g_secagem').value = g.secagem; document.getElementById('g_cio').value = g.cio;
+            document.getElementById('g_outros').value = g.outros;
+            window.scrollTo(0,0);
+        }
+
+        function deletarGado(id) { chamarConfirmacao("Excluir permanentemente do banco de dados?", () => { db.collection("gados").doc(id).delete(); }); }
+
+        function alterarStatusGado(novoStatus) {
+            chamarConfirmacao(`Mudar status para ${novoStatus}?`, () => {
+                const g = bd.gados.find(x => x.id === itemSelecionadoId);
+                const novoHist = [...g.historico, { idTemp: Date.now(), tipo: 'Status', data: new Date().toISOString().split('T')[0], desc: `Alterado para ${novoStatus}` }];
+                db.collection("gados").doc(itemSelecionadoId).update({ status: novoStatus, historico: novoHist });
+            });
+        }
+
+        function addPesagem(e) {
+            e.preventDefault();
+            const data = document.getElementById('pesagem_data').value;
+            const peso = document.getElementById('pesagem_peso').value;
+            chamarConfirmacao("Registrar pesagem?", () => {
+                const g = bd.gados.find(x => x.id === itemSelecionadoId);
+                const novasPesagens = [...g.pesagens, { idTemp: Date.now(), data, peso }];
+                const novoHist = [...g.historico, { idTemp: Date.now()+1, tipo: 'Pesagem', data, desc: `${peso} Kg` }];
+                db.collection("gados").doc(itemSelecionadoId).update({ pesagens: novasPesagens, historico: novoHist }).then(()=>{
+                    document.getElementById('pesagem_data').value = ''; document.getElementById('pesagem_peso').value = '';
+                });
+            });
+        }
+
+        function addHistoricoGado(e) {
+            e.preventDefault();
+            const data = document.getElementById('hg_data').value;
+            const desc = document.getElementById('hg_desc').value;
+            chamarConfirmacao("Registrar evento?", () => {
+                const g = bd.gados.find(x => x.id === itemSelecionadoId);
+                const novoHist = [...g.historico, { idTemp: Date.now(), tipo: 'Evento', data, desc }];
+                db.collection("gados").doc(itemSelecionadoId).update({ historico: novoHist }).then(()=>{
+                    document.getElementById('hg_data').value = ''; document.getElementById('hg_desc').value = '';
+                });
+            });
+        }
+
+        function deletarHistoricoGado(idTemp) {
+            chamarConfirmacao("Apagar registro?", () => {
+                const g = bd.gados.find(x => x.id === itemSelecionadoId);
+                const novoHist = g.historico.filter(x => x.idTemp !== idTemp);
+                db.collection("gados").doc(itemSelecionadoId).update({ historico: novoHist });
+            });
+        }
+
+        function renderDetalhesGado() {
+            const g = bd.gados.find(x => x.id === itemSelecionadoId);
+            if(!g) return;
+            document.getElementById('detalhe-gado-titulo').innerText = `Ficha: ${g.brinco}`;
+            document.getElementById('detalhe-gado-status').innerText = g.status;
+            
+            document.getElementById('gado-info-resumo').innerHTML = `
+                <div><p><strong>Brinco/Nome:</strong> ${g.brinco}</p><p><strong>Sexo:</strong> ${g.sexo}</p><p><strong>Categoria:</strong> ${g.cat || '-'}</p><p><strong>Nasc:</strong> ${formatData(g.nasc)}</p><p><strong>Pai:</strong> ${g.pai || '-'} | <strong>Mãe:</strong> ${g.mae || '-'}</p></div>
+                <div><p><strong>Estágio Repro.:</strong> ${g.estagio || '-'}</p><p><strong>Último Parto:</strong> ${formatData(g.ult_parto)}</p><p><strong>Previsão Parto:</strong> ${formatData(g.prev_parto)}</p><p><strong>Palpação:</strong> ${g.palpacao || '-'}</p><p><strong>Outros:</strong> ${g.outros || '-'}</p></div>
+            `;
+
+            const tbody = document.getElementById('tabela-historico-gado');
+            tbody.innerHTML = '';
+            const histOrdenado = [...(g.historico || [])].sort((a,b) => new Date(b.data) - new Date(a.data));
+            histOrdenado.forEach(h => {
+                tbody.innerHTML += `<tr><td>${h.tipo}</td><td>${formatData(h.data)}</td><td>${h.desc}</td>
+                    <td><button class="danger small" onclick="deletarHistoricoGado(${h.idTemp})">Apagar</button></td></tr>`;
+            });
+        }
+
+        // ================= PASTO =================
+        function salvarPasto(e) {
+            e.preventDefault();
+            const nome = document.getElementById('p_nome').value;
+            chamarConfirmacao("Cadastrar pasto?", () => { 
+                db.collection("pastos").add({ nome, historico: [] }); 
+                document.getElementById('p_nome').value = ''; 
+            });
+        }
+        function deletarPasto(id) { chamarConfirmacao("Excluir pasto?", () => { db.collection("pastos").doc(id).delete(); }); }
+
+        function toggleCamposPasto() {
+            const tipo = document.getElementById('pe_tipo').value;
+            document.getElementById('campo-praga').style.display = (tipo === 'Praga') ? 'block' : 'none';
+            document.getElementById('campo-adubo').style.display = (tipo === 'Adubacao') ? 'block' : 'none';
+        }
+
+        function addEventoPasto(e) {
+            e.preventDefault();
+            const tipo = document.getElementById('pe_tipo').value;
+            const data = document.getElementById('pe_data').value;
+            const desc = document.getElementById('pe_desc').value;
+            let detalhes = desc;
+            if(tipo === 'Praga') detalhes += ` (Veneno: ${document.getElementById('pe_veneno').value})`;
+            if(tipo === 'Adubacao') detalhes += ` (Qtd: ${document.getElementById('pe_kg').value} Kg)`;
+
+            chamarConfirmacao("Registrar manejo?", () => {
+                const p = bd.pastos.find(x => x.id === itemSelecionadoId);
+                const novoHist = [...p.historico, { idTemp: Date.now(), tipo, data, detalhes }];
+                db.collection("pastos").doc(itemSelecionadoId).update({ historico: novoHist }).then(()=>{
+                    document.getElementById('pe_data').value = ''; document.getElementById('pe_desc').value = '';
+                });
+            });
+        }
+
+        function deletarHistPasto(idTemp) {
+            chamarConfirmacao("Apagar evento?", () => { 
+                const p = bd.pastos.find(x => x.id === itemSelecionadoId); 
+                const novoHist = p.historico.filter(x => x.idTemp !== idTemp); 
+                db.collection("pastos").doc(itemSelecionadoId).update({ historico: novoHist }); 
+            });
+        }
+
+        function renderDetalhesPasto() {
+            const p = bd.pastos.find(x => x.id === itemSelecionadoId);
+            if(!p) return;
+            document.getElementById('detalhe-pasto-titulo').innerText = `Ficha do Pasto`;
+            document.getElementById('pasto-info-resumo').innerHTML = `<p><strong>Identificação do Pasto:</strong> ${p.nome}</p><p><strong>Total de Eventos:</strong> ${p.historico.length}</p>`;
+
+            const tbody = document.getElementById('tabela-historico-pasto');
+            tbody.innerHTML = '';
+            p.historico.forEach(h => {
+                tbody.innerHTML += `<tr><td>${formatData(h.data)}</td><td>${h.tipo}</td><td>${h.detalhes}</td>
+                    <td><button class="danger small" onclick="deletarHistPasto(${h.idTemp})">Apagar</button></td></tr>`;
+            });
+        }
+
+        // ================= MÁQUINAS =================
+        function salvarMaquina(e) {
+            e.preventDefault();
+            const nome = document.getElementById('m_nome').value;
+            chamarConfirmacao("Cadastrar máquina?", () => { 
+                db.collection("maquinas").add({ nome, historico: [] }); 
+                document.getElementById('m_nome').value = ''; 
+            });
+        }
+        function deletarMaquina(id) { chamarConfirmacao("Excluir máquina?", () => { db.collection("maquinas").doc(id).delete(); }); }
+
+        function addEventoMaquina(e) {
+            e.preventDefault();
+            const ev = {
+                idTemp: Date.now(), data: document.getElementById('me_data').value,
+                evento: document.getElementById('me_evento').value, peca: document.getElementById('me_peca').value,
+                custo_mo: document.getElementById('me_custo_mo').value || 0, custo_peca: document.getElementById('me_custo_peca').value || 0,
+                prox_manut: document.getElementById('me_prox_manut').value
+            };
+            chamarConfirmacao("Registrar manutenção?", () => {
+                const m = bd.maquinas.find(x => x.id === itemSelecionadoId); 
+                const novoHist = [...m.historico, ev];
+                db.collection("maquinas").doc(itemSelecionadoId).update({ historico: novoHist }).then(()=>{
+                    document.getElementById('me_data').value = ''; document.getElementById('me_evento').value = '';
+                });
+            });
+        }
+
+        function deletarHistMaquina(idTemp) {
+            chamarConfirmacao("Apagar manutenção?", () => { 
+                const m = bd.maquinas.find(x => x.id === itemSelecionadoId); 
+                const novoHist = m.historico.filter(x => x.idTemp !== idTemp); 
+                db.collection("maquinas").doc(itemSelecionadoId).update({ historico: novoHist }); 
+            });
+        }
+
+        function renderDetalhesMaquina() {
+            const m = bd.maquinas.find(x => x.id === itemSelecionadoId);
+            if(!m) return;
+            document.getElementById('detalhe-maquina-titulo').innerText = `Ficha da Máquina`;
+            document.getElementById('maquina-info-resumo').innerHTML = `<p><strong>Modelo:</strong> ${m.nome}</p><p><strong>Total de Manutenções:</strong> ${m.historico.length}</p>`;
+
+            const tbody = document.getElementById('tabela-historico-maquina');
+            tbody.innerHTML = '';
+            m.historico.forEach(h => {
+                const total = parseFloat(h.custo_mo) + parseFloat(h.custo_peca);
+                tbody.innerHTML += `<tr><td>${formatData(h.data)}</td><td>${h.evento} ${h.peca ? '<br>Peça: '+h.peca : ''}</td>
+                    <td>Total: R$${total.toFixed(2)}</td><td>${formatData(h.prox_manut)}</td>
+                    <td><button class="danger small" onclick="deletarHistMaquina(${h.idTemp})">Apagar</button></td></tr>`;
+            });
+        }
+
+        // ================= RENDER LISTAS =================
+        function renderListas() {
+            const tbGado = document.getElementById('lista-gado'); tbGado.innerHTML = '';
+            bd.gados.forEach(g => {
+                tbGado.innerHTML += `<tr>
+                    <td>${g.brinco}</td><td>${g.sexo}</td><td>${g.cat || '-'}</td><td>${g.status}</td>
+                    <td><button class="small info" onclick="abrirDetalhes('detalhes-gado', '${g.id}', 'gado')">Abrir</button>
+                        <button class="warning small" onclick="editarGado('${g.id}')">Editar</button>
+                        <button class="danger small" onclick="deletarGado('${g.id}')">Apagar</button></td></tr>`;
+            });
+
+            const tbPasto = document.getElementById('lista-pasto'); tbPasto.innerHTML = '';
+            bd.pastos.forEach(p => {
+                tbPasto.innerHTML += `<tr>
+                    <td>${p.nome}</td>
+                    <td><button class="small info" onclick="abrirDetalhes('detalhes-pasto', '${p.id}', 'pasto')">Abrir</button>
+                        <button class="danger small" onclick="deletarPasto('${p.id}')">Apagar</button></td></tr>`;
+            });
+
+            const tbMaq = document.getElementById('lista-maquinas'); tbMaq.innerHTML = '';
+            bd.maquinas.forEach(m => {
+                tbMaq.innerHTML += `<tr>
+                    <td>${m.nome}</td>
+                    <td><button class="small info" onclick="abrirDetalhes('detalhes-maquina', '${m.id}', 'maquina')">Abrir</button>
+                        <button class="danger small" onclick="deletarMaquina('${m.id}')">Apagar</button></td></tr>`;
+            });
+
+            document.getElementById('dash-gado').innerText = bd.gados.length;
+            document.getElementById('dash-pasto').innerText = bd.pastos.length;
+            document.getElementById('dash-maq').innerText = bd.maquinas.length;
+        }
+
+        if ('serviceWorker' in navigator) { window.addEventListener('load', () => { navigator.serviceWorker.register('sw.js'); }); }
+    </script>
+</body>
+</html>
